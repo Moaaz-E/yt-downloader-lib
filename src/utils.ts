@@ -63,7 +63,7 @@ export function AwaitEnd(stream : Readable) {
 }
 
 export function GetAny<T>(object : any) {
-    for(const key of object) {
-        return key as T
+    for(const key in object) {
+        return object[key] as T
     }
 }
