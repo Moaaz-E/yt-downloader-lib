@@ -1,13 +1,19 @@
 import { Manifest } from "mpd-parser";
 import https from "https"
 import { Readable, Stream } from "stream";
-function IsType<T>(object : any, key : keyof T) {
-    return object[key] != undefined;
+import { resolve } from "path";
+function IsType<T>(object : any, ...keys : (keyof T)[]) {
+    const val = keys.every((key) => object[key] != undefined)
+    return val;
 }
 
+export function Sleep(duration : number) {
+    return new Promise(res => setTimeout(res, duration))
+}
 export function IsManifest(object : any) {
     return IsType<Manifest>(object, 'playlists');
 }
+
 export function GetFullUrl(uri : string, manifestUrl : string) {
     if(uri.startsWith("/")) {
         return manifestUrl.replace(/\/[^\/]*\.mpd/, uri);
@@ -27,7 +33,33 @@ export function GetStream(url : string) {
         })    
     })
 }
+export function GetString(stream : Readable) {
+    return new Promise<string>((resolve, reject) => {
+        let str = ""
+        let resolved = false;
+        stream.on("data", (data) => {
+            str += data;
+        })
 
+        stream.once("close", () => {
+            if(!resolved) {
+                resolve(str);
+                resolved = true;
+            }
+        })
+
+        stream.on("error", (err) => {
+            reject(err);
+        })
+
+        stream.once("end", () => {
+            if(!resolved) {
+                resolve(str);
+                resolved = true;
+            }
+        })
+    })
+}
 export function GetBytes(stream : Readable) {
     return new Promise<Buffer>((resolve, reject) => {
         let buffer = Buffer.alloc(0);
