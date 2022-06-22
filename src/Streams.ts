@@ -5,14 +5,22 @@ import {parse, Manifest, AudioDict, Audio, Playlist, AudioDef, Segment, Resoluti
 import { GetAny as GetFirst, GetBytes, GetFullUrl, GetStream, GetString, IsManifest, Sleep } from "./utils";
 import logger, { LogPlaylist } from "./Logger";
 import { GetTrunHeader } from "./mp4";
-import { ByteStream, CreateMuxStream, Mux } from "./ffmpeg-helper";
+import { ByteStream, CreateCodecStream, CreateMuxStream, Mux } from "./ffmpeg-helper";
 import { writeFileSync } from "fs";
+import { GetPlayerResponse } from "./youtube";
+import { YTInitial } from "./vendors/YTInitial";
 
 
 interface IVideoStream extends Readable {    
     get HasAudio() : boolean;
     get StreamUrl() : string;
 }
+
+interface INetworkStream {
+    get Started() : boolean;
+    Start() : Promise<void>;
+}
+
 class VideoStream extends Readable implements IVideoStream  {
     protected hasAudio : boolean = true
     protected streamUrl : string;
@@ -36,6 +44,18 @@ export function GetDashStream(streamUrl : string) {
 
 }
 
+export function GetM3U8Stream(streamUrl : string) {
+    const stream = new M3U8Stream(streamUrl);
+    stream.Start();
+    return stream;
+}
+
+
+export function StreamVideo(streamUrl : string) {
+    const stream = new YTStream(streamUrl);
+    stream.Start();
+    return stream;
+}
 
 type InitSegments = {
     audio? : string,
@@ -205,5 +225,49 @@ export class DashStream extends VideoStream {
             LogPlaylist(playlist);
         }
         return playlist;
+    }
+}
+
+export class M3U8Stream extends VideoStream implements INetworkStream {
+    get Started(): boolean {
+        return this.started;
+    }
+    async Start(): Promise<void> {
+        this.decodedStream.on("data", (data) => {
+            this.push(data);
+        })
+        // Get the data from url
+        CreateCodecStream(this.avStream, this.decodedStream);
+        const bytes = await GetBytes(await GetStream("https://filesamples.com/samples/video/ts/sample_640x360.ts"))
+        this.avStream.write(bytes);
+    }
+    private started = false;
+    private avStream : ByteStream = new ByteStream();
+    private decodedStream : ByteStream = new ByteStream();
+
+}
+
+class YTStream extends VideoStream implements INetworkStream {
+    Title = "";
+    Channel = "";
+    private started : boolean = false;
+    private initResponse : YTInitial | null = null;
+    constructor(streamUrl : string) {
+        super(streamUrl);
+    }
+    get Started(): boolean {
+        return this.started;
+    }
+    async Start(): Promise<void> {
+        const content = await GetString(await GetStream(this.streamUrl));
+        this.initResponse = GetPlayerResponse(content);
+        if(this.initResponse === null) {
+            this.started = false;
+            this.emit("error", `Could not open stream: ${this.StreamUrl}`);
+            return;
+        }
+        this.Title = this.initResponse.videoDetails.title;
+        this.Channel = this.initResponse.videoDetails.author;
+        GetM3U8Stream(this.streamUrl)
     }
 }

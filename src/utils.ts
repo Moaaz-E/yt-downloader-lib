@@ -48,7 +48,7 @@ export function GetString(stream : Readable) {
             }
         })
 
-        stream.on("error", (err) => {
+        stream.once("error", (err) => {
             reject(err);
         })
 
