@@ -15,9 +15,14 @@ import { DashStream, GetDashStream, GetM3U8Stream, StreamVideo } from "./Streams
 // f.on('data', (s) => {
 //    console.log(s);
 // });
-
-const stream = StreamVideo("https://www.youtube.com/watch?v=5qap5aO4i9A");
-
+const url = "https://www.youtube.com/watch?v=_LmLS5l_jL4";
+const url2 = "https://www.youtube.com/watch?v=5qap5aO4i9A";
+const stream = StreamVideo(url2);
+stream.AddChatListener((messages) => {
+   messages.slice(0, 2).forEach((msg) => {
+        logger.info(`[${msg.Timestamp}] ${msg.Author}: ${msg.Content}`); 
+   })
+});
 
 // const stream = GetDashStream("test");
 // const stream = GetM3U8Stream("");
