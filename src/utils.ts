@@ -2,6 +2,7 @@ import { Manifest } from "mpd-parser";
 import https from "https"
 import { Readable, Stream } from "stream";
 import { resolve } from "path";
+import axios from "axios";
 function IsType<T>(object : any, ...keys : (keyof T)[]) {
     const val = keys.every((key) => object[key] != undefined)
     return val;
@@ -19,6 +20,27 @@ export function GetFullUrl(uri : string, manifestUrl : string) {
         return manifestUrl.replace(/\/[^\/]*\.mpd/, uri);
     }
     return uri;
+}
+
+export async function GetContentsAsObject<T>(stream : Readable) {
+    return JSON.parse(await GetString(stream)) as T;
+}
+
+export function PostStream(url : string) {
+    return new Promise<Readable>((resolve, reject) => {
+        https.request({method: "POST", href: url}, (res) => {
+            if(res.statusCode !== undefined && res.statusCode == 200) {
+                resolve(res);
+            }
+            else {
+                reject(`StatusCode: ${res.statusCode} | StatusMessage: ${res.statusMessage}`);
+            }
+        });
+    })
+}
+
+export function ValueOrDefault(value : string | undefined, _default : string = "") {
+    return value === undefined ? _default : value;
 }
 
 export function GetStream(url : string) {
