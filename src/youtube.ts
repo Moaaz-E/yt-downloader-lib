@@ -123,17 +123,18 @@ export type YoutubeOptions = {
     Resolution : VideoResolution
 }
 
-export enum VideoResolution {
-    "144P",
-    "360P",
-    "480P",
-    "720P",
-    "1080P",
-    "4K"
-}
+// export enum VideoResolution {
+//     "144P",
+//     "360P",
+//     "480P",
+//     "720P",
+//     "1080P",
+//     "4K"
+// }
+export type VideoResolution = 144 | 360 | 720 | 1080;
 
-export function GetDefaultResolution() {
-    return VideoResolution["4K"];
+export function GetDefaultResolution() : VideoResolution {
+    return 1080
 }
 
 // export enum VideoFramerate {

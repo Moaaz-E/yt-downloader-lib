@@ -19,6 +19,15 @@ export function CreateCodecStream(inStream : Readable, outStream : Writable) {
     command.run();
 }
 
+export function CreateHlsDownloadStream(hlsManifestUrl : string, outStream : Writable) {
+    const command = ffmpeg(hlsManifestUrl).outputFormat("mp4").output(outStream).outputOptions('-movflags', 'empty_moov');
+    AddLogging(command);
+    outStream.on("error", (err) => {
+        command.kill("");
+    })
+    command.run();
+}
+
 export function CreateMuxStream(firstStream : Readable, secondStream : Readable) {
     const stream = new ByteStream();
     ffmpeg(firstStream).input(secondStream).toFormat("mp4").output(stream)

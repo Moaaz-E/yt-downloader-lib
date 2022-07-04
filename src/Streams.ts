@@ -2,16 +2,14 @@ import { Readable, Stream, StreamOptions } from "stream";
 import fsPromise from "fs/promises"
 import fs from "fs"
 import EventEmitter from "events"
-import {parse, Manifest, AudioDict, Audio, Playlist, AudioDef, Segment, Resolution} from "mpd-parser"
-import { GetAny as GetFirst, GetBytes, GetFullUrl, GetStream, GetString, IsManifest, Sleep, ValueOrDefault } from "./utils";
+import { GetBestHlsManifest, GetBytes, GetStream, GetString, HlsManifest, ParseHlsManifest as ParseHlsManifest, Sleep, ValueOrDefault } from "./utils";
 import logger, { LogPlaylist } from "./Logger";
 import { GetTrunHeader } from "./mp4";
-import { ByteStream, CreateCodecStream, CreateMuxStream, Mux } from "./ffmpeg-helper";
+import { ByteStream, CreateCodecStream, CreateHlsDownloadStream, CreateMuxStream, Mux } from "./ffmpeg-helper";
 import { fstat, writeFileSync } from "fs";
 import { GetDefaultOptions, GetInitialData, GetInnerTubeApiKey, GetLiveChat, GetPlayerResponse, LiveChatMessage, MapYTLiveChatResponse, YoutubeOptions } from "./youtube";
 import { YTInitial } from "./YTInitial";
 import { YTInitialData } from "./YTInitialData";
-import { LiveChatTextMessageRenderer2, Message3 } from "./ytLiveChat";
 import path from "path";
 
 
@@ -20,8 +18,9 @@ interface IVideoStream extends Readable {
     get StreamUrl() : string;
 }
 
-interface INetworkStream {
+export interface INetworkStream {
     get Started() : boolean;
+    get Error() : boolean;
     Start() : Promise<void>;
 }
 
@@ -48,8 +47,7 @@ export function GetM3U8Stream(streamUrl : string) {
     return stream;
 }
 
-
-export function StreamVideo(streamUrl : string, options? : YoutubeOptions) {
+export function StreamVideo(streamUrl : string, options? : YoutubeOptions) : YTStream {
     if(!options) {
         options = GetDefaultOptions();
     }
@@ -67,6 +65,10 @@ export class M3U8Stream extends VideoStream implements INetworkStream {
     get Started(): boolean {
         return this.started;
     }
+
+    get Error() : boolean {
+        return this.error;
+    }
     async Start(): Promise<void> {
         this.decodedStream.on("data", (data) => {
             this.push(data);
@@ -77,6 +79,7 @@ export class M3U8Stream extends VideoStream implements INetworkStream {
         this.avStream.write(bytes);
     }
     private started = false;
+    private error = false;
     private avStream : ByteStream = new ByteStream();
     private decodedStream : ByteStream = new ByteStream();
 
@@ -84,14 +87,17 @@ export class M3U8Stream extends VideoStream implements INetworkStream {
 
 
 type liveChatUpdate = (message : LiveChatMessage[]) => void;
-class YTStream extends VideoStream implements INetworkStream {
+export class YTStream extends VideoStream implements INetworkStream {
     private started : boolean = false;
+    private error : boolean = false;
     private initResponse : YTInitial | null = null;
     private initData : YTInitialData | null = null;
     private avStream : VideoStream | null = null;
     private options : YoutubeOptions;
     private apiKey : string | null = null;
     private liveChatUpdateCallback : liveChatUpdate[] = []
+    private liveChatQueue : LiveChatMessage[][] = [];
+    private manifests : HlsManifest[] | null = null
 
     
     
@@ -107,15 +113,22 @@ class YTStream extends VideoStream implements INetworkStream {
     }
     
     
+    get Started(): boolean {
+        return this.started;
+    }
+    get Error() : boolean {
+        return this.error;
+    }
 
     constructor(streamUrl : string, options : YoutubeOptions) {
         super(streamUrl);
         this.options = options;
     }
-    get Started(): boolean {
-        return this.started;
-    }
     async Start(): Promise<void> {
+        if(this.started) {
+            return;
+        }
+        this.error = false;
         const content = await GetString(await GetStream(this.streamUrl));
         this.initResponse = GetPlayerResponse(content);
         this.apiKey = GetInnerTubeApiKey(content);
@@ -125,31 +138,50 @@ class YTStream extends VideoStream implements INetworkStream {
 
         if(this.initResponse === null || this.initData === null) {
             this.started = false;
+            this.error = true;
             this.emit("error", `Could not open stream: ${this.StreamUrl}`);
             return;
         }
 
         logger.info(`Streaming [${this.Channel}]: "${this.Title}"`);
-        this.avStream = GetM3U8Stream(this.streamUrl)
-        this.avStream.on("data", (chunk) => {
+        this.manifests = await ParseHlsManifest(this.initResponse.streamingData.hlsManifestUrl);
+        const bestManifest = GetBestHlsManifest(this.manifests, this.options.Resolution);
+        const byteStream = new ByteStream();
+        byteStream.on("data", (chunk) => {
             this.push(chunk);
         });
+        CreateHlsDownloadStream(bestManifest.URL, byteStream);
+        this.started = true;
+        this.error = false;
     }
     private async UpdateChat() {
         if(this.apiKey !== null && this.initData !== null) {
             let continuation = this.initData?.contents.twoColumnWatchNextResults.conversationBar.liveChatRenderer.continuations[0].reloadContinuationData.continuation
             let timeoutDuration = 0
             while(true) {
-                await Sleep(timeoutDuration);
-                const livechat = await GetLiveChat(this.apiKey, continuation)
-                if(livechat) {
-                    const _cont = livechat.continuationContents.liveChatContinuation.continuations[0];
-                    const mapped = MapYTLiveChatResponse(livechat);
-                    continuation = _cont.timedContinuationData.continuation;
-                    timeoutDuration = _cont.timedContinuationData.timeoutMs;
-                    this.liveChatUpdateCallback.forEach(cb => cb(mapped));
-                    livechat.continuationContents
+                try {
+                    await Sleep(timeoutDuration);
+                    const livechat = await GetLiveChat(this.apiKey, continuation)
+                    if(livechat) {
+                        const _cont = livechat.continuationContents.liveChatContinuation.continuations[0];
+                        if(livechat.continuationContents.liveChatContinuation.actions !== undefined) {
+                            this.pushLiveChatUpdate(MapYTLiveChatResponse(livechat));
+                        }
+                        continuation = _cont.timedContinuationData.continuation;
+                        timeoutDuration = _cont.timedContinuationData.timeoutMs;
+                        livechat.continuationContents
+                    }
+                } catch (error) {
+                    logger.error(error);
                 }
+            }
+        }
+    }
+    private pushLiveChatUpdate(livechat : LiveChatMessage[]) {
+        this.liveChatQueue.push(livechat);
+        if(this.liveChatUpdateCallback.length !== 0) {
+            while(this.liveChatQueue.length !== 0) {
+                this.liveChatUpdateCallback.forEach(cb => cb(this.liveChatQueue.shift() as LiveChatMessage[]))
             }
         }
     }
@@ -160,12 +192,4 @@ class YTStream extends VideoStream implements INetworkStream {
     RemoveChatListener(listener: () => void) {
         // this.liveChatUpdateCallback.
     }
-}
-
-export function DownloadStream(streamUrl : string, savePath: string = "./streams",  options? : YoutubeOptions) {
-    const stream = StreamVideo(streamUrl, options);
-    if(!fs.existsSync(savePath)) {
-        fs.mkdirSync(savePath);
-    }
-    path.join(savePath, stream.)
 }
