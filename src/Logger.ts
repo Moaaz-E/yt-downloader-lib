@@ -1,4 +1,3 @@
-import { Playlist } from "mpd-parser";
 import winston from "winston"
 process.env.DEBUG = "true";
 const { combine, timestamp, printf, prettyPrint } = winston.format;
@@ -40,7 +39,4 @@ if (process.env.DEBUG) {
 
 }
 
-export default logger;
-export function LogPlaylist(playlist : Playlist) {
-    logger.info(`Playlist ${playlist.attributes.NAME}:\n\t\tCodec: ${playlist.attributes.CODECS}\n\t\tResolution: ${playlist.attributes.RESOLUTION?.width}x${playlist.attributes.RESOLUTION?.height}`);
-}
+export default logger

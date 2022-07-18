@@ -1,4 +1,4 @@
-import { INetworkStream, StreamVideo } from "./Streams";
+import { INetworkStream, StreamVideo, YTStream } from "./Streams";
 import fs from "fs";
 import { Sleep } from "./utils";
 import { YoutubeOptions } from "./youtube";
@@ -51,6 +51,9 @@ export async function DownloadStream(streamUrl : string, savePath: string = "./s
             logger.error(`Steam error: ${err}`);
             outputStream.end();
         })
+        stream.on('pause', () => {
+            // outputStream.drain()
+        })
         stream.AddChatListener((messages) => {
             const firstMessage = messages[0]
             fs.writeFile(path.join(liveChatDir, firstMessage.TimestampUsec+".json"), JSON.stringify(messages), (err) => {
@@ -58,7 +61,6 @@ export async function DownloadStream(streamUrl : string, savePath: string = "./s
                     logger.error(err)
                 }    
             });
-            
         })
         return stream;
     }

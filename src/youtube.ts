@@ -1,7 +1,7 @@
 import axios from "axios";
-import { YTInitial } from "./YTInitial";
-import { Continuation, YTInitialData } from "./YTInitialData";
-import { LiveChatTextMessageRenderer2, Message3, YTLiveChatResponse } from "./ytLiveChat";
+import { YTInitialRes } from "./YTInitialRes";
+import { YTInitialData } from "./YTInitialData";
+import { YTLiveChatResponse } from "./YTLiveChat";
 
 const liveChatUrl = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat";
 const liveChatReplayUrl = "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat_replay"
@@ -57,8 +57,7 @@ export function GetPlayerResponse(content : string) {
     const match = content.match(ytInitialPlayerResponse);
     if(match && match.length >= 2) {
         const obj = match[1].slice(0, match[1].length-1);
-        const ytInit = <YTInitial>JSON.parse(obj);
-        return ytInit;
+        return <YTInitialRes>JSON.parse(obj);
     }
     return null;
 }
@@ -123,21 +122,7 @@ export type YoutubeOptions = {
     Resolution : VideoResolution
 }
 
-// export enum VideoResolution {
-//     "144P",
-//     "360P",
-//     "480P",
-//     "720P",
-//     "1080P",
-//     "4K"
-// }
 export type VideoResolution = 144 | 360 | 720 | 1080;
-
 export function GetDefaultResolution() : VideoResolution {
     return 1080
 }
-
-// export enum VideoFramerate {
-//     "30FPS" = 0x010,
-//     "60FPS" = 0x020,
-// }

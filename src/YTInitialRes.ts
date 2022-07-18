@@ -1,4 +1,4 @@
-export interface YTInitial {
+export interface YTInitialRes {
     responseContext: ResponseContext
     playabilityStatus: PlayabilityStatus
     streamingData: StreamingData

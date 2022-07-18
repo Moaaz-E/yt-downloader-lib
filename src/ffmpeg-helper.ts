@@ -1,24 +1,12 @@
 import ffmpeg from 'fluent-ffmpeg'
-import { Duplex, Readable, Writable } from 'stream'
-import fs from 'fs'
+import { Writable } from 'stream'
 import logger from './Logger';
-import exp from 'constants';
 
-export class ByteStream extends Duplex {
-    _write(chunk: any, encoding: BufferEncoding, callback: (error?: Error | null | undefined) => void): void {
-        this.push(chunk)
-        callback();
-    }
+type KillCommand = () => void;
 
-    _read(size: number): void { }
-}
-
-export function CreateCodecStream(inStream : Readable, outStream : Writable) {
-    const command = ffmpeg(inStream).format("mp4").output(outStream).outputOptions('-movflags', 'empty_moov');
-    AddLogging(command);
-    command.run();
-}
-
+/**
+ * 
+ */
 export function CreateHlsDownloadStream(hlsManifestUrl : string, outStream : Writable) {
     const command = ffmpeg(hlsManifestUrl).outputFormat("mp4").output(outStream).outputOptions('-movflags', 'empty_moov');
     AddLogging(command);
@@ -26,20 +14,12 @@ export function CreateHlsDownloadStream(hlsManifestUrl : string, outStream : Wri
         command.kill("");
     })
     command.run();
+    return (() => {command.kill("")}) as KillCommand;
 }
 
-export function CreateMuxStream(firstStream : Readable, secondStream : Readable) {
-    const stream = new ByteStream();
-    ffmpeg(firstStream).input(secondStream).toFormat("mp4").output(stream)
-    return stream;
-}
-
-export function Mux(stream : Readable, file : string, outputStream : Writable) {
-    const command = ffmpeg(stream).input(file).format("mp4").output(outputStream);
-    AddLogging(command)
-    command.run();
-}
-
+/**
+ * Add logging to an ffmpeg command
+ */
 function AddLogging(command : ffmpeg.FfmpegCommand) {
     command.on("end", (err, _stdout, _stderr) => {
         logger.error(`${err}\n${_stdout}\n${_stderr}`);

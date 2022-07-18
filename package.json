@@ -2,9 +2,10 @@
   "name": "ytlib",
   "version": "1.0.0",
   "description": "",
-  "main": "main.js",
+  "main": "lib/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc"
   },
   "author": "",
   "license": "ISC",
@@ -16,8 +17,6 @@
   "dependencies": {
     "axios": "^0.27.2",
     "fluent-ffmpeg": "^2.1.2",
-    "mpd-parser": "^0.21.1",
-    "node-video-lib": "^2.2.1",
     "winston": "^3.7.2"
   }
 }
